@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "id": "whatishedoing",
-  "version": "@@VERSION@@",
+  "version": "${version}",
   "name": "WhatIsHeDoing",
   "description": "Live Minecraft client-view streaming between players.",
   "authors": [
