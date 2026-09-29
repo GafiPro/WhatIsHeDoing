@@ -4,47 +4,56 @@ import com.gafipro.whatishedoing.common.RemoteVideoFrame;
 import com.mojang.blaze3d.platform.NativeImage;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.texture.DynamicTexture;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 
 public final class RemoteTexture {
-    private static final ResourceLocation LOCATION =
-            ResourceLocation.fromNamespaceAndPath("whatishedoing", "remote_view");
+    private static final Identifier LOCATION =
+            Identifier.fromNamespaceAndPath("whatishedoing", "remote_view");
 
     private DynamicTexture texture;
+    private int width;
+    private int height;
     private long lastSequence = -1L;
 
-    public boolean update(RemoteVideoFrame.Snapshot snapshot) {
+    public void update(RemoteVideoFrame.Snapshot snapshot) {
         if (snapshot.sequence() == lastSequence) {
-            return false;
-        }
-
-        NativeImage image = new NativeImage(
-                NativeImage.Format.RGBA,
-                snapshot.width(),
-                snapshot.height(),
-                false);
-
-        for (int y = 0; y < snapshot.height(); y++) {
-            for (int x = 0; x < snapshot.width(); x++) {
-                image.setPixelRGBA(x, y, snapshot.argb()[y * snapshot.width() + x]);
-            }
+            return;
         }
 
         Minecraft client = Minecraft.getInstance();
 
-        if (texture == null) {
-            texture = new DynamicTexture(image);
+        if (texture == null || width != snapshot.width() || height != snapshot.height()) {
+            if (texture != null) {
+                texture.close();
+            }
+
+            width = snapshot.width();
+            height = snapshot.height();
+            texture = new DynamicTexture(
+                    () -> "WhatIsHeDoing remote view",
+                    width,
+                    height,
+                    false);
             client.getTextureManager().register(LOCATION, texture);
-        } else {
-            texture.setPixels(image);
-            texture.upload();
         }
 
+        NativeImage pixels = texture.getPixels();
+        if (pixels == null) {
+            return;
+        }
+
+        int[] argb = snapshot.argb();
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                pixels.setPixel(x, y, argb[y * width + x]);
+            }
+        }
+
+        texture.upload();
         lastSequence = snapshot.sequence();
-        return true;
     }
 
-    public ResourceLocation location() {
+    public Identifier location() {
         return LOCATION;
     }
 
