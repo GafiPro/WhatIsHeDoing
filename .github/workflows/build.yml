@@ -35,6 +35,12 @@ jobs:
             versions/1.21.11/build.log
             versions/1.21.11/build/reports/
           if-no-files-found: ignore
+      - name: Upload 1.21.11 jars
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: whatishedoing-1.21.11
+          path: versions/1.21.11/build/libs/*.jar
 
   build-26-2:
     runs-on: ubuntu-latest
@@ -61,3 +67,9 @@ jobs:
             versions/26.2/build.log
             versions/26.2/build/reports/
           if-no-files-found: ignore
+      - name: Upload 26.2 jars
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: whatishedoing-26.2
+          path: versions/26.2/build/libs/*.jar
