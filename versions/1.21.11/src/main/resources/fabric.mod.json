@@ -4,7 +4,9 @@
   "version": "@@VERSION@@",
   "name": "WhatIsHeDoing",
   "description": "Live Minecraft client-view streaming between players.",
-  "authors": ["GafiPro"],
+  "authors": [
+    "GafiPro"
+  ],
   "environment": "client",
   "entrypoints": {
     "client": [
@@ -16,5 +18,11 @@
     "minecraft": "~1.21.11",
     "java": ">=21",
     "fabric-api": "*"
-  }
+  },
+  "mixins": [
+    {
+      "config": "whatishedoing.client.mixins.json",
+      "environment": "client"
+    }
+  ]
 }
