@@ -13,8 +13,8 @@ import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallba
 import net.fabricmc.fabric.api.client.command.v2.ClientCommands;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.renderer.RenderTarget;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
+import com.mojang.blaze3d.pipeline.RenderTarget;
 
 import java.net.URI;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -158,12 +158,12 @@ public final class WhatIsHeDoingClient implements ClientModInitializer {
         }
         lastCaptureNs = now;
 
-        RenderTarget target = client.getMainRenderTarget();
+        RenderTarget target = client.gameRenderer.mainRenderTarget();
         target.bindRead();
         NativeFrameCapture.capture(target, MAX_WIDTH, MAX_HEIGHT, camera);
     }
 
-    public static void renderRemoteView(GuiGraphics guiGraphics) {
+    public static void renderRemoteView(GuiGraphicsExtractor guiGraphics) {
         if (camera == null || camera.role() != WebRtcCameraSession.Role.VIEWER) {
             return;
         }
@@ -179,13 +179,11 @@ public final class WhatIsHeDoingClient implements ClientModInitializer {
                 remoteTexture.location(),
                 0,
                 0,
-                Minecraft.getInstance().getWindow().getGuiScaledWidth(),
-                Minecraft.getInstance().getWindow().getGuiScaledHeight(),
-                0,
-                0,
-                snapshot.width(),
-                snapshot.height(),
-                snapshot.width(),
-                snapshot.height());
+                guiGraphics.guiWidth(),
+                guiGraphics.guiHeight(),
+                0.0F,
+                0.0F,
+                1.0F,
+                1.0F);
     }
 }
