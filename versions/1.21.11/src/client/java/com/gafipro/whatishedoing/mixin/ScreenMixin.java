@@ -10,7 +10,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(Screen.class)
 public abstract class ScreenMixin {
-    @Inject(method = "renderWithTooltip", at = @At("TAIL"))
+    @Inject(method = "renderWithTooltipAndSubtitles", at = @At("TAIL"))
     private void whatIsHeDoing$renderRemote(GuiGraphics guiGraphics, int mouseX, int mouseY, float delta, CallbackInfo ci) {
         WhatIsHeDoingClient.renderRemoteView(guiGraphics);
     }
