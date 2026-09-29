@@ -159,7 +159,6 @@ public final class WhatIsHeDoingClient implements ClientModInitializer {
         lastCaptureNs = now;
 
         RenderTarget target = client.gameRenderer.mainRenderTarget();
-        target.bindRead();
         NativeFrameCapture.capture(target, MAX_WIDTH, MAX_HEIGHT, camera);
     }
 
