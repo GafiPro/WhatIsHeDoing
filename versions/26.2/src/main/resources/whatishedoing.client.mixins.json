@@ -3,7 +3,7 @@
   "package": "com.gafipro.whatishedoing.mixin",
   "compatibilityLevel": "JAVA_25",
   "client": [
-    "GameRendererMixin",
+    "MinecraftRenderFrameMixin",
     "GuiMixin",
     "ScreenMixin"
   ]
