@@ -35,8 +35,10 @@ dependencies {
 
     implementation "com.google.code.gson:gson:${project.gson_version}"
     implementation "dev.onvoid.webrtc:webrtc-java:${project.webrtc_java_version}"
+    implementation "dev.onvoid.webrtc:webrtc-java:${project.webrtc_java_version}:windows-x86_64"
     include "com.google.code.gson:gson:${gson_version}"
     include "dev.onvoid.webrtc:webrtc-java:${webrtc_java_version}"
+    include "dev.onvoid.webrtc:webrtc-java:${webrtc_java_version}:windows-x86_64"
 }
 
 processResources {
