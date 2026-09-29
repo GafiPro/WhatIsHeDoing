@@ -4,12 +4,11 @@ import com.google.gson.JsonObject;
 import dev.onvoid.webrtc.CreateSessionDescriptionObserver;
 import dev.onvoid.webrtc.PeerConnectionFactory;
 import dev.onvoid.webrtc.PeerConnectionObserver;
+import dev.onvoid.webrtc.RTCAnswerOptions;
 import dev.onvoid.webrtc.RTCConfiguration;
 import dev.onvoid.webrtc.RTCIceCandidate;
 import dev.onvoid.webrtc.RTCIceServer;
-import dev.onvoid.webrtc.RTCOfferAnswerOptions;
 import dev.onvoid.webrtc.RTCOfferOptions;
-import dev.onvoid.webrtc.RTCAnswerOptions;
 import dev.onvoid.webrtc.RTCPeerConnection;
 import dev.onvoid.webrtc.RTCPeerConnectionState;
 import dev.onvoid.webrtc.RTCRtpTransceiver;
@@ -18,27 +17,29 @@ import dev.onvoid.webrtc.RTCRtpTransceiverInit;
 import dev.onvoid.webrtc.RTCSdpType;
 import dev.onvoid.webrtc.RTCSessionDescription;
 import dev.onvoid.webrtc.SetSessionDescriptionObserver;
-import dev.onvoid.webrtc.media.MediaStream;
 import dev.onvoid.webrtc.media.MediaStreamTrack;
 import dev.onvoid.webrtc.media.video.CustomVideoSource;
+import dev.onvoid.webrtc.media.video.I420Buffer;
+import dev.onvoid.webrtc.media.video.NativeI420Buffer;
 import dev.onvoid.webrtc.media.video.VideoFrame;
 import dev.onvoid.webrtc.media.video.VideoTrack;
 import dev.onvoid.webrtc.media.video.VideoTrackSink;
-import dev.onvoid.webrtc.media.video.NativeI420Buffer;
 
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Version-neutral WebRTC camera session.
  *
- * The observed client is the sender; the requesting client is receiver-only.
- * No Minecraft server packet is used for media.
+ * Viewer: receives exactly one video track.
+ * Sharer: sends exactly one video track populated from the Minecraft framebuffer.
  */
 public final class WebRtcCameraSession {
-    public enum Role { NONE, VIEWER, SHARER }
+    public enum Role {
+        NONE, VIEWER, SHARER
+    }
 
     public interface Listener {
         void onLive();
@@ -53,13 +54,14 @@ public final class WebRtcCameraSession {
 
     private final PeerConnectionFactory factory;
     private final AtomicReference<Role> role = new AtomicReference<>(Role.NONE);
+    private final List<RTCIceCandidate> pendingCandidates = new ArrayList<>();
 
     private RTCPeerConnection peer;
     private CustomVideoSource videoSource;
     private VideoTrack videoTrack;
     private VideoTrackSink remoteSink;
     private String peerName;
-    private int[] pendingCandidates;
+    private boolean remoteDescriptionSet;
 
     public WebRtcCameraSession(
             PresenceClient signaling,
@@ -83,34 +85,37 @@ public final class WebRtcCameraSession {
 
     public synchronized void startViewer(String target) {
         stopInternal(false);
+
+        if (target == null || target.isBlank()) {
+            return;
+        }
+
         role.set(Role.VIEWER);
         peerName = target;
 
         try {
             createPeer(false);
+            signaling.requestCamera(target);
             createOffer();
         } catch (Throwable throwable) {
-            fail("Unable to create viewer connection: " + throwable.getMessage());
+            fail("Unable to create viewer connection: " + safeMessage(throwable));
         }
     }
 
     public synchronized void prepareSharer(String requester) {
-        if (!allowIncomingRequests) {
-            return;
-        }
-
-        if (requester == null || requester.isBlank()) {
+        if (!allowIncomingRequests || requester == null || requester.isBlank()) {
             return;
         }
 
         stopInternal(false);
+
         role.set(Role.SHARER);
         peerName = requester;
 
         try {
             createPeer(true);
         } catch (Throwable throwable) {
-            fail("Unable to prepare camera sharing: " + throwable.getMessage());
+            fail("Unable to prepare camera sharing: " + safeMessage(throwable));
         }
     }
 
@@ -120,6 +125,7 @@ public final class WebRtcCameraSession {
         }
 
         String kind = payload.has("kind") ? payload.get("kind").getAsString() : "";
+
         try {
             switch (kind) {
                 case "offer" -> handleOffer(payload);
@@ -129,12 +135,19 @@ public final class WebRtcCameraSession {
                 }
             }
         } catch (Throwable throwable) {
-            fail("WebRTC signaling error: " + throwable.getMessage());
+            fail("WebRTC signaling error: " + safeMessage(throwable));
+        }
+    }
+
+    public synchronized void handleStop(String from) {
+        if (from != null && from.equals(peerName)) {
+            stopInternal(false);
         }
     }
 
     public synchronized void pushArgbFrame(int width, int height, int[] argb) {
-        if (role.get() != Role.SHARER || videoSource == null || argb == null) {
+        if (role.get() != Role.SHARER || videoSource == null || argb == null
+                || argb.length < width * height) {
             return;
         }
 
@@ -146,6 +159,8 @@ public final class WebRtcCameraSession {
             writeArgbToI420(width, height, argb, buffer);
             frame = new VideoFrame(buffer, System.nanoTime());
             videoSource.pushFrame(frame);
+        } catch (Throwable throwable) {
+            listener.onError("Video frame error: " + safeMessage(throwable));
         } finally {
             if (frame != null) {
                 frame.release();
@@ -170,10 +185,9 @@ public final class WebRtcCameraSession {
         peer = factory.createPeerConnection(config, new PeerConnectionObserver() {
             @Override
             public void onIceCandidate(RTCIceCandidate candidate) {
-                if (peerName == null) {
-                    return;
+                if (peerName != null) {
+                    signaling.sendSignal(peerName, candidateJson(candidate));
                 }
-                signaling.sendSignal(peerName, candidateJson(candidate));
             }
 
             @Override
@@ -189,21 +203,7 @@ public final class WebRtcCameraSession {
 
             @Override
             public void onTrack(RTCRtpTransceiver transceiver) {
-                MediaStreamTrack track = transceiver.getReceiver().getTrack();
-                if (track instanceof VideoTrack incoming) {
-                    remoteSink = frame -> remoteFrame.publish(frame);
-                    incoming.addSink(remoteSink);
-                }
-            }
-
-            @Override
-            public void onAddStream(MediaStream stream) {
-                for (MediaStreamTrack track : stream.getVideoTracks()) {
-                    if (track instanceof VideoTrack incoming) {
-                        remoteSink = frame -> remoteFrame.publish(frame);
-                        incoming.addSink(remoteSink);
-                    }
-                }
+                attachIncomingTrack(transceiver.getReceiver().getTrack());
             }
         });
 
@@ -211,22 +211,25 @@ public final class WebRtcCameraSession {
             throw new IllegalStateException("PeerConnection creation returned null");
         }
 
-        if (sender) {
-            videoSource = new CustomVideoSource();
-            videoTrack = factory.createVideoTrack("wihd-camera", videoSource);
+        videoSource = new CustomVideoSource();
+        videoTrack = factory.createVideoTrack(
+                sender ? "wihd-camera" : "wihd-recvonly",
+                videoSource
+        );
 
-            RTCRtpTransceiverInit init = new RTCRtpTransceiverInit();
-            init.direction = RTCRtpTransceiverDirection.SEND_ONLY;
-            init.streamIds = List.of("wihd");
-            peer.addTransceiver(videoTrack, init);
-        } else {
-            videoSource = new CustomVideoSource();
-            videoTrack = factory.createVideoTrack("wihd-recvonly", videoSource);
+        RTCRtpTransceiverInit init = new RTCRtpTransceiverInit();
+        init.direction = sender
+                ? RTCRtpTransceiverDirection.SEND_ONLY
+                : RTCRtpTransceiverDirection.RECV_ONLY;
+        init.streamIds = List.of("wihd");
 
-            RTCRtpTransceiverInit init = new RTCRtpTransceiverInit();
-            init.direction = RTCRtpTransceiverDirection.RECV_ONLY;
-            init.streamIds = List.of("wihd");
-            peer.addTransceiver(videoTrack, init);
+        peer.addTransceiver(videoTrack, init);
+    }
+
+    private void attachIncomingTrack(MediaStreamTrack track) {
+        if (track instanceof VideoTrack incoming) {
+            remoteSink = remoteFrame::publish;
+            incoming.addSink(remoteSink);
         }
     }
 
@@ -255,12 +258,18 @@ public final class WebRtcCameraSession {
     }
 
     private void handleOffer(JsonObject payload) {
-        ensureRoleSharer();
+        if (role.get() != Role.SHARER) {
+            return;
+        }
+
         RTCSessionDescription description = descriptionFromJson(payload);
+
         peer.setRemoteDescription(description, new SetSessionDescriptionObserver() {
             @Override
             public void onSuccess() {
+                remoteDescriptionSet = true;
                 flushPendingCandidates();
+
                 peer.createAnswer(new RTCAnswerOptions(), new CreateSessionDescriptionObserver() {
                     @Override
                     public void onSuccess(RTCSessionDescription answer) {
@@ -292,11 +301,16 @@ public final class WebRtcCameraSession {
     }
 
     private void handleAnswer(JsonObject payload) {
-        ensureRoleViewer();
+        if (role.get() != Role.VIEWER) {
+            return;
+        }
+
         RTCSessionDescription description = descriptionFromJson(payload);
+
         peer.setRemoteDescription(description, new SetSessionDescriptionObserver() {
             @Override
             public void onSuccess() {
+                remoteDescriptionSet = true;
                 flushPendingCandidates();
             }
 
@@ -314,37 +328,22 @@ public final class WebRtcCameraSession {
                 payload.get("sdp").getAsString()
         );
 
-        if (peer == null || peer.getRemoteDescription() == null) {
-            queueCandidate(candidate);
+        if (peer == null || !remoteDescriptionSet) {
+            pendingCandidates.add(candidate);
         } else {
             peer.addIceCandidate(candidate);
         }
     }
 
-    private void queueCandidate(RTCIceCandidate candidate) {
-        // Candidate count is intentionally bounded. The normal WebRTC offer/answer
-        // path should keep this queue very small.
-        if (pendingCandidates == null) {
-            pendingCandidates = new int[0];
-        }
-        // Kept empty for now; candidates are retried through the SDP gathered form.
-        // Trickle ICE is still sent and the gathered SDP contains candidates too.
-    }
-
     private void flushPendingCandidates() {
-        // The implementation currently relies on candidates embedded in SDP.
-    }
-
-    private void ensureRoleSharer() {
-        if (role.get() != Role.SHARER) {
-            throw new IllegalStateException("Expected sharer role");
+        if (peer == null || !remoteDescriptionSet) {
+            return;
         }
-    }
 
-    private void ensureRoleViewer() {
-        if (role.get() != Role.VIEWER) {
-            throw new IllegalStateException("Expected viewer role");
+        for (RTCIceCandidate candidate : pendingCandidates) {
+            peer.addIceCandidate(candidate);
         }
+        pendingCandidates.clear();
     }
 
     private static JsonObject sessionDescriptionJson(String kind, RTCSessionDescription description) {
@@ -371,11 +370,60 @@ public final class WebRtcCameraSession {
         return new RTCSessionDescription(type, payload.get("sdp").getAsString());
     }
 
-    private static void writeArgbToI420(int width, int height, int[] argb, NativeI420Buffer output) {
-        ByteBufferYuv.write(width, height, argb,
-                output.getDataY(), output.getStrideY(),
-                output.getDataU(), output.getStrideU(),
-                output.getDataV(), output.getStrideV());
+    private static void writeArgbToI420(
+            int width,
+            int height,
+            int[] argb,
+            NativeI420Buffer output) {
+        ByteBuffer y = output.getDataY();
+        ByteBuffer u = output.getDataU();
+        ByteBuffer v = output.getDataV();
+
+        int yStride = output.getStrideY();
+        int uStride = output.getStrideU();
+        int vStride = output.getStrideV();
+
+        for (int py = 0; py < height; py++) {
+            int row = py * width;
+            int yOffset = py * yStride;
+
+            for (int px = 0; px < width; px++) {
+                int rgb = argb[row + px];
+                int r = (rgb >> 16) & 0xFF;
+                int g = (rgb >> 8) & 0xFF;
+                int b = rgb & 0xFF;
+                int value = ((66 * r + 129 * g + 25 * b + 128) >> 8) + 16;
+                y.put(yOffset + px, (byte) clamp(value));
+            }
+        }
+
+        for (int py = 0; py < height; py += 2) {
+            int uvRow = py >> 1;
+
+            for (int px = 0; px < width; px += 2) {
+                int sumU = 0;
+                int sumV = 0;
+                int count = 0;
+
+                for (int dy = 0; dy < 2 && py + dy < height; dy++) {
+                    int row = (py + dy) * width;
+                    for (int dx = 0; dx < 2 && px + dx < width; dx++) {
+                        int rgb = argb[row + px + dx];
+                        int r = (rgb >> 16) & 0xFF;
+                        int g = (rgb >> 8) & 0xFF;
+                        int b = rgb & 0xFF;
+
+                        sumU += ((-38 * r - 74 * g + 112 * b + 128) >> 8) + 128;
+                        sumV += ((112 * r - 94 * g - 18 * b + 128) >> 8) + 128;
+                        count++;
+                    }
+                }
+
+                int index = uvRow * uStride + (px >> 1);
+                u.put(index, (byte) clamp(sumU / count));
+                v.put(uvRow * vStride + (px >> 1), (byte) clamp(sumV / count));
+            }
+        }
     }
 
     private void stopInternal(boolean notifyPeer) {
@@ -387,21 +435,35 @@ public final class WebRtcCameraSession {
 
         peerName = null;
         role.set(Role.NONE);
+        remoteDescriptionSet = false;
+        pendingCandidates.clear();
+
+        if (remoteSink != null && peer != null) {
+            for (RTCRtpTransceiver transceiver : peer.getTransceivers()) {
+                MediaStreamTrack track = transceiver.getReceiver().getTrack();
+                if (track instanceof VideoTrack incoming) {
+                    incoming.removeSink(remoteSink);
+                }
+            }
+        }
+
         remoteSink = null;
 
         if (videoTrack != null) {
             videoTrack.dispose();
             videoTrack = null;
         }
+
         if (videoSource != null) {
             videoSource.dispose();
             videoSource = null;
         }
+
         if (peer != null) {
             peer.close();
             peer = null;
         }
-        pendingCandidates = null;
+
         listener.onClosed();
     }
 
@@ -410,55 +472,13 @@ public final class WebRtcCameraSession {
         stopInternal(false);
     }
 
-    private static final class ByteBufferYuv {
-        private ByteBufferYuv() {}
+    private static int clamp(int value) {
+        return Math.max(0, Math.min(255, value));
+    }
 
-        static void write(
-                int width, int height, int[] argb,
-                java.nio.ByteBuffer y, int yStride,
-                java.nio.ByteBuffer u, int uStride,
-                java.nio.ByteBuffer v, int vStride) {
-
-            for (int py = 0; py < height; py++) {
-                for (int px = 0; px < width; px++) {
-                    int rgb = argb[py * width + px];
-                    int r = (rgb >> 16) & 0xFF;
-                    int g = (rgb >> 8) & 0xFF;
-                    int b = rgb & 0xFF;
-                    int yy = ((66 * r + 129 * g + 25 * b + 128) >> 8) + 16;
-                    y.put(py * yStride + px, (byte) clamp(yy));
-                }
-            }
-
-            for (int py = 0; py < height; py += 2) {
-                for (int px = 0; px < width; px += 2) {
-                    int sumU = 0;
-                    int sumV = 0;
-                    int count = 0;
-
-                    for (int dy = 0; dy < 2 && py + dy < height; dy++) {
-                        for (int dx = 0; dx < 2 && px + dx < width; dx++) {
-                            int rgb = argb[(py + dy) * width + px + dx];
-                            int r = (rgb >> 16) & 0xFF;
-                            int g = (rgb >> 8) & 0xFF;
-                            int b = rgb & 0xFF;
-
-                            sumU += ((-38 * r - 74 * g + 112 * b + 128) >> 8) + 128;
-                            sumV += ((112 * r - 94 * g - 18 * b + 128) >> 8) + 128;
-                            count++;
-                        }
-                    }
-
-                    int uvRow = py >> 1;
-                    int uvCol = px >> 1;
-                    u.put(uvRow * uStride + uvCol, (byte) clamp(sumU / count));
-                    v.put(uvRow * vStride + uvCol, (byte) clamp(sumV / count));
-                }
-            }
-        }
-
-        private static int clamp(int value) {
-            return Math.max(0, Math.min(255, value));
-        }
+    private static String safeMessage(Throwable throwable) {
+        return throwable.getMessage() == null
+                ? throwable.getClass().getSimpleName()
+                : throwable.getMessage();
     }
 }
