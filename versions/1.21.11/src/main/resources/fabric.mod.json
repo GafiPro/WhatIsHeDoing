@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "id": "whatishedoing",
+  "version": "@@VERSION@@",
+  "name": "WhatIsHeDoing",
+  "description": "Live Minecraft client-view streaming between players.",
+  "authors": ["GafiPro"],
+  "environment": "client",
+  "entrypoints": {
+    "client": [
+      "com.gafipro.whatishedoing.client.WhatIsHeDoingClient"
+    ]
+  },
+  "depends": {
+    "fabricloader": ">=0.19.5",
+    "minecraft": "~1.21.11",
+    "java": ">=21",
+    "fabric-api": "*"
+  }
+}
