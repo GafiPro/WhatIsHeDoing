@@ -4,10 +4,8 @@ import java.util.Objects;
 import java.util.prefs.Preferences;
 
 /**
- * Local policy for the client whose Minecraft view may be shared.
- *
- * It is intentionally stored locally and is not controlled by a Minecraft
- * server. The default is disabled until the user explicitly enables sharing.
+ * Local sharing policy. Camera sharing is disabled until the player explicitly
+ * enables it through the local JVM property or preferences.
  */
 public final class SharePolicy {
     private static final String KEY = "allowCameraRequests";
@@ -18,7 +16,8 @@ public final class SharePolicy {
     }
 
     public boolean allowsRequests() {
-        return prefs.getBoolean(KEY, false);
+        return Boolean.getBoolean("wihd.allowCamera")
+                || prefs.getBoolean(KEY, false);
     }
 
     public void setAllowsRequests(boolean allowed) {
