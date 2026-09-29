@@ -1,13 +1,12 @@
 package com.gafipro.whatishedoing.client;
 
 import com.gafipro.whatishedoing.common.WebRtcCameraSession;
-import com.mojang.blaze3d.buffers.GpuBuffer;
-import com.mojang.blaze3d.buffers.GpuBufferSlice;
-import com.mojang.blaze3d.buffers.GpuFence;
+import com.mojang.renderpearl.api.buffers.GpuBuffer;
+import com.mojang.renderpearl.api.buffers.GpuBufferSlice;
+import com.mojang.renderpearl.api.commands.CommandEncoder;
+import com.mojang.renderpearl.api.device.GpuDevice;
+import com.mojang.renderpearl.api.textures.GpuTexture;
 import com.mojang.blaze3d.pipeline.RenderTarget;
-import com.mojang.blaze3d.platform.NativeImage;
-import com.mojang.blaze3d.systems.CommandEncoder;
-import com.mojang.blaze3d.systems.GpuDevice;
 import com.mojang.blaze3d.systems.RenderSystem;
 import java.nio.ByteBuffer;
 import net.minecraft.util.ARGB;
@@ -37,45 +36,33 @@ public final class NativeFrameCapture {
         if ((outputWidth & 1) != 0) outputWidth--;
         if ((outputHeight & 1) != 0) outputHeight--;
 
+        GpuTexture texture = target.getColorTexture();
         GpuDevice device = RenderSystem.getDevice();
-        CommandEncoder encoder = device.createCommandEncoder();
-        long byteSize = (long) width * height * 4L;
-
-        try (GpuBuffer buffer = device.createBuffer(
+        GpuBuffer buffer = device.createBuffer(
                 null,
                 GpuBuffer.USAGE_COPY_DST | GpuBuffer.USAGE_MAP_READ,
-                byteSize)) {
+                (long) width * height * 4L);
 
-            encoder.copyTextureToBuffer(
-                    target.getColorTexture(),
-                    buffer,
-                    0,
-                    () -> {},
-                    0);
-
-            GpuFence fence = encoder.createFence();
-            encoder.submit();
-            fence.awaitCompletion(Long.MAX_VALUE);
-            fence.close();
-
+        CommandEncoder encoder = device.createCommandEncoder();
+        encoder.copyTextureToBuffer(texture, buffer, 0, () -> {
             try (GpuBufferSlice.MappedView view = buffer.map(true, false)) {
                 ByteBuffer data = view.data();
                 int[] pixels = new int[outputWidth * outputHeight];
 
                 for (int y = 0; y < outputHeight; y++) {
-                    int sourceY = (int) (((long) y * height) / outputHeight);
-                    int flippedY = height - sourceY - 1;
-
+                    int sourceY = height - 1 - (int) (((long) y * height) / outputHeight);
                     for (int x = 0; x < outputWidth; x++) {
                         int sourceX = (int) (((long) x * width) / outputWidth);
-                        int raw = data.getInt((sourceX + flippedY * width) * 4);
+                        int raw = data.getInt((sourceX + sourceY * width) * 4);
                         pixels[y * outputWidth + x] =
                                 ARGB.fromABGR(0xFF000000 | raw);
                     }
                 }
 
                 session.pushArgbFrame(outputWidth, outputHeight, pixels);
+            } finally {
+                buffer.close();
             }
-        }
+        }, 0);
     }
 }
