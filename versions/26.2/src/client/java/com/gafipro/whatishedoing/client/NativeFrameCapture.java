@@ -1,12 +1,12 @@
 package com.gafipro.whatishedoing.client;
 
 import com.gafipro.whatishedoing.common.WebRtcCameraSession;
-import com.mojang.renderpearl.api.buffers.GpuBuffer;
-import com.mojang.renderpearl.api.buffers.GpuBufferSlice;
-import com.mojang.renderpearl.api.commands.CommandEncoder;
-import com.mojang.renderpearl.api.device.GpuDevice;
-import com.mojang.renderpearl.api.textures.GpuTexture;
+import com.mojang.blaze3d.buffers.GpuBuffer;
+import com.mojang.blaze3d.buffers.GpuBufferSlice;
+import com.mojang.blaze3d.buffers.GpuFence;
 import com.mojang.blaze3d.pipeline.RenderTarget;
+import com.mojang.blaze3d.systems.CommandEncoder;
+import com.mojang.blaze3d.systems.GpuDevice;
 import com.mojang.blaze3d.systems.RenderSystem;
 import java.nio.ByteBuffer;
 import net.minecraft.util.ARGB;
@@ -36,15 +36,27 @@ public final class NativeFrameCapture {
         if ((outputWidth & 1) != 0) outputWidth--;
         if ((outputHeight & 1) != 0) outputHeight--;
 
-        GpuTexture texture = target.getColorTexture();
         GpuDevice device = RenderSystem.getDevice();
-        GpuBuffer buffer = device.createBuffer(
+        CommandEncoder encoder = device.createCommandEncoder();
+        long byteSize = (long) width * height * 4L;
+
+        try (GpuBuffer buffer = device.createBuffer(
                 null,
                 GpuBuffer.USAGE_COPY_DST | GpuBuffer.USAGE_MAP_READ,
-                (long) width * height * 4L);
+                byteSize)) {
 
-        CommandEncoder encoder = device.createCommandEncoder();
-        encoder.copyTextureToBuffer(texture, buffer, 0, () -> {
+            encoder.copyTextureToBuffer(
+                    target.getColorTexture(),
+                    buffer,
+                    0,
+                    () -> {},
+                    0);
+
+            GpuFence fence = encoder.createFence();
+            encoder.submit();
+            fence.awaitCompletion(Long.MAX_VALUE);
+            fence.close();
+
             try (GpuBufferSlice.MappedView view = buffer.map(true, false)) {
                 ByteBuffer data = view.data();
                 int[] pixels = new int[outputWidth * outputHeight];
@@ -60,9 +72,7 @@ public final class NativeFrameCapture {
                 }
 
                 session.pushArgbFrame(outputWidth, outputHeight, pixels);
-            } finally {
-                buffer.close();
             }
-        }, 0);
+        }
     }
 }
