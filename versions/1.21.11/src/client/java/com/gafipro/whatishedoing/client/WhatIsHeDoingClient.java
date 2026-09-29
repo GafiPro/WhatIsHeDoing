@@ -169,15 +169,14 @@ public final class WhatIsHeDoingClient implements ClientModInitializer {
 
         remoteTexture.update(snapshot);
         graphics.blit(
+                net.minecraft.client.renderer.RenderPipelines.GUI_TEXTURED,
                 remoteTexture.location(),
                 0,
                 0,
+                0.0F,
+                0.0F,
                 Minecraft.getInstance().getWindow().getGuiScaledWidth(),
                 Minecraft.getInstance().getWindow().getGuiScaledHeight(),
-                0.0F,
-                0.0F,
-                snapshot.width(),
-                snapshot.height(),
                 snapshot.width(),
                 snapshot.height());
     }
