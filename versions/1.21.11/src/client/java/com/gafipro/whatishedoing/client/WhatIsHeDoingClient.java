@@ -5,14 +5,14 @@ import com.gafipro.whatishedoing.common.RemoteVideoFrame;
 import com.gafipro.whatishedoing.common.SharePolicy;
 import com.gafipro.whatishedoing.common.WebRtcCameraSession;
 import com.google.gson.JsonObject;
+import com.mojang.brigadier.arguments.StringArgumentType;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandManager;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.renderer.RenderTarget;
-import com.mojang.brigadier.arguments.StringArgumentType;
+import com.mojang.blaze3d.pipeline.RenderTarget;
 
 import java.net.URI;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -28,10 +28,9 @@ public final class WhatIsHeDoingClient implements ClientModInitializer {
     private static WebRtcCameraSession camera;
     private static final SharePolicy sharePolicy = new SharePolicy("1.21.11");
     private static final RemoteVideoFrame remoteFrame = new RemoteVideoFrame();
-    private static long lastCaptureNs;
-
     private static final RemoteTexture remoteTexture = new RemoteTexture();
     private static final AtomicBoolean initialized = new AtomicBoolean();
+    private static long lastCaptureNs;
 
     @Override
     public void onInitializeClient() {
@@ -73,15 +72,11 @@ public final class WhatIsHeDoingClient implements ClientModInitializer {
                         new PresenceClient.Listener() {
                             @Override
                             public void onMessage(JsonObject message) {
-                                String type = message.has("type")
-                                        ? message.get("type").getAsString()
-                                        : "";
-
-                                if (camera == null) {
+                                if (camera == null || !message.has("type")) {
                                     return;
                                 }
 
-                                switch (type) {
+                                switch (message.get("type").getAsString()) {
                                     case "camera_request" ->
                                             camera.prepareSharer(message.get("from").getAsString());
                                     case "camera_stop" ->
@@ -90,7 +85,8 @@ public final class WhatIsHeDoingClient implements ClientModInitializer {
                                             camera.handleSignal(
                                                     message.get("from").getAsString(),
                                                     message.getAsJsonObject("payload"));
-                                    case "camera_unavailable" -> camera.stop();
+                                    case "camera_unavailable" ->
+                                            camera.stop();
                                     default -> {
                                     }
                                 }
@@ -120,7 +116,6 @@ public final class WhatIsHeDoingClient implements ClientModInitializer {
 
                             @Override
                             public void onError(String message) {
-                                // Deliberately no chat messages.
                             }
                         });
 
@@ -144,13 +139,10 @@ public final class WhatIsHeDoingClient implements ClientModInitializer {
         }
     }
 
-    public static WebRtcCameraSession session() {
-        return camera;
-    }
-
     public static void afterGameRender() {
         Minecraft client = Minecraft.getInstance();
-        if (camera == null || camera.role() != WebRtcCameraSession.Role.SHARER
+        if (camera == null
+                || camera.role() != WebRtcCameraSession.Role.SHARER
                 || !sharePolicy.allowsRequests()) {
             return;
         }
@@ -162,12 +154,10 @@ public final class WhatIsHeDoingClient implements ClientModInitializer {
         lastCaptureNs = now;
 
         RenderTarget target = client.getMainRenderTarget();
-        target.bindRead();
-
         NativeFrameCapture.capture(target, MAX_WIDTH, MAX_HEIGHT, camera);
     }
 
-    public static void renderRemoteView(GuiGraphics guiGraphics) {
+    public static void renderRemoteView(GuiGraphics graphics) {
         if (camera == null || camera.role() != WebRtcCameraSession.Role.VIEWER) {
             return;
         }
@@ -177,40 +167,18 @@ public final class WhatIsHeDoingClient implements ClientModInitializer {
             return;
         }
 
-        if (remoteTexture.update(snapshot)) {
-            guiGraphics.blit(
-                    remoteTexture.location(),
-                    0,
-                    0,
-                    clientWidth(guiGraphics),
-                    clientHeight(guiGraphics),
-                    0,
-                    0,
-                    snapshot.width(),
-                    snapshot.height(),
-                    snapshot.width(),
-                    snapshot.height());
-        } else {
-            guiGraphics.blit(
-                    remoteTexture.location(),
-                    0,
-                    0,
-                    clientWidth(guiGraphics),
-                    clientHeight(guiGraphics),
-                    0,
-                    0,
-                    snapshot.width(),
-                    snapshot.height(),
-                    snapshot.width(),
-                    snapshot.height());
-        }
-    }
-
-    private static int clientWidth(GuiGraphics graphics) {
-        return Minecraft.getInstance().getWindow().getGuiScaledWidth();
-    }
-
-    private static int clientHeight(GuiGraphics graphics) {
-        return Minecraft.getInstance().getWindow().getGuiScaledHeight();
+        remoteTexture.update(snapshot);
+        graphics.blit(
+                remoteTexture.location(),
+                0,
+                0,
+                Minecraft.getInstance().getWindow().getGuiScaledWidth(),
+                Minecraft.getInstance().getWindow().getGuiScaledHeight(),
+                0.0F,
+                0.0F,
+                snapshot.width(),
+                snapshot.height(),
+                snapshot.width(),
+                snapshot.height());
     }
 }
