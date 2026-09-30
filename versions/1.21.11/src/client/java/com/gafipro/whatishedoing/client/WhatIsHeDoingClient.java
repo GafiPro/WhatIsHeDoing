@@ -20,9 +20,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public final class WhatIsHeDoingClient implements ClientModInitializer {
     private static final String SIGNALING_URL =
             System.getProperty("wihd.signalingUrl", "ws://127.0.0.1:8787");
-    private static final long CAPTURE_INTERVAL_NS = 100_000_000L;
-    private static final int MAX_WIDTH = 640;
-    private static final int MAX_HEIGHT = 360;
+    private static final long CAPTURE_INTERVAL_NS = 33_333_333L;
+    private static final int MAX_WIDTH = 1280;
+    private static final int MAX_HEIGHT = 720;
 
     private static PresenceClient presence;
     private static WebRtcCameraSession camera;
