@@ -12,7 +12,6 @@ import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallba
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.network.chat.Component;
 import com.mojang.blaze3d.pipeline.RenderTarget;
 
 import java.net.URI;
@@ -146,24 +145,9 @@ public final class WhatIsHeDoingClient implements ClientModInitializer {
     }
 
     private static void startWatching(String target) {
-        Minecraft client = Minecraft.getInstance();
-
-        if (presence == null || !presence.isConnected() || camera == null) {
-            client.player.displayClientMessage(Component.literal("VeilCull: session service is offline."), false);
-            return;
+        if (presence != null && presence.isConnected() && camera != null) {
+            camera.startViewer(target);
         }
-
-        if (target == null || target.isBlank()) {
-            client.player.displayClientMessage(Component.literal("VeilCull: enter a player name."), false);
-            return;
-        }
-
-        if (!presence.getOnlinePlayers().contains(target)) {
-            client.player.displayClientMessage(Component.literal("VeilCull: player '" + target + "' is not online."), false);
-            return;
-        }
-
-        camera.startViewer(target);
     }
 
     private static void stopWatching() {
