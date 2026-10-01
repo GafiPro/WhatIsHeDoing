@@ -1,0 +1,107 @@
+plugins {
+    id 'java-library'
+    id 'maven-publish'
+    id 'net.neoforged.moddev' version '2.0.148'
+}
+
+version = project.mod_version
+group = project.mod_group_id
+
+base {
+    archivesName = "VeilCull-${project.mod_version}-1.21.1-NeoForge"
+}
+
+java {
+    toolchain.languageVersion = JavaLanguageVersion.of(21)
+    withSourcesJar()
+}
+
+sourceSets {
+    main {
+        java {
+            srcDir "../../common/src/main/java"
+            srcDir "src/main/java"
+        }
+    }
+}
+
+neoForge {
+    version = project.neo_version
+
+    parchment {
+        minecraftVersion = project.parchment_minecraft_version
+        mappingsVersion = project.parchment_mappings_version
+    }
+
+    mods {
+        "${project.mod_id}" {
+            sourceSet(sourceSets.main)
+        }
+    }
+
+    runs {
+        client {
+            client()
+            gameDirectory = project.file("run/client")
+            systemProperty "wihd.signalingUrl", System.getProperty("wihd.signalingUrl", "ws://127.0.0.1:8787")
+        }
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    jarJar(implementation("com.google.code.gson:gson:${project.gson_version}")) {
+        version {
+            strictly "[2.13.0,2.14.0)"
+            prefer project.gson_version
+        }
+    }
+
+    jarJar(implementation("dev.onvoid.webrtc:webrtc-java:${project.webrtc_java_version}")) {
+        version {
+            strictly "[0.14.0,0.15.0)"
+            prefer project.webrtc_java_version
+        }
+    }
+
+    jarJar(implementation("dev.onvoid.webrtc:webrtc-java:${project.webrtc_java_version}:windows-x86_64")) {
+        version {
+            strictly "[0.14.0,0.15.0)"
+            prefer project.webrtc_java_version
+        }
+    }
+
+    // NeoForge 1.21.1 does not load ordinary non-Minecraft libraries automatically.
+    additionalRuntimeClasspath "com.google.code.gson:gson:${project.gson_version}"
+    additionalRuntimeClasspath "dev.onvoid.webrtc:webrtc-java:${project.webrtc_java_version}"
+    additionalRuntimeClasspath "dev.onvoid.webrtc:webrtc-java:${project.webrtc_java_version}:windows-x86_64"
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = "UTF-8"
+    options.release = 21
+}
+
+processResources {
+    var replaceProperties = [
+        minecraft_version: minecraft_version,
+        minecraft_version_range: minecraft_version_range,
+        neo_version: neo_version,
+        loader_version_range: loader_version_range,
+        mod_id: mod_id,
+        mod_name: mod_name,
+        mod_version: mod_version,
+        mod_license: mod_license,
+        mod_authors: mod_authors,
+        mod_description: mod_description
+    ]
+
+    inputs.properties replaceProperties
+
+    filesMatching("META-INF/neoforge.mods.toml") {
+        expand replaceProperties
+    }
+}

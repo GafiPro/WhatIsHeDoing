@@ -10,66 +10,34 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build-1-21-11:
+  build-1-21-1-neoforge:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: versions/1.21.11
+        working-directory: versions/1.21.1-neoforge
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
-          java-version: "25"
+          java-version: "21"
           cache: gradle
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "9.7.0"
       - run: bash -o pipefail -c 'gradle build --no-daemon --max-workers=2 2>&1 | tee build.log'
-      - name: Upload 1.21.11 build log
+      - name: Upload NeoForge build log
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: build-log-1-21-11
+          name: build-log-1-21-1-neoforge
           path: |
-            versions/1.21.11/build.log
-            versions/1.21.11/build/reports/
+            versions/1.21.1-neoforge/build.log
+            versions/1.21.1-neoforge/build/reports/
           if-no-files-found: ignore
-      - name: Upload 1.21.11 jars
+      - name: Upload NeoForge jar
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: whatishedoing-1.21.11
-          path: versions/1.21.11/build/libs/*.jar
-
-  build-26-2:
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: versions/26.2
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: "25"
-          cache: gradle
-      - uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: "9.7.0"
-      - run: bash -o pipefail -c 'gradle build --no-daemon --max-workers=2 2>&1 | tee build.log'
-      - name: Upload 26.2 build log
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-log-26-2
-          path: |
-            versions/26.2/build.log
-            versions/26.2/build/reports/
-          if-no-files-found: ignore
-      - name: Upload 26.2 jars
-        if: success()
-        uses: actions/upload-artifact@v4
-        with:
-          name: whatishedoing-26.2
-          path: versions/26.2/build/libs/*.jar
+          name: veillcull-1.21.1-neoforge
+          path: versions/1.21.1-neoforge/build/libs/*-1.21.1-NeoForge.jar
