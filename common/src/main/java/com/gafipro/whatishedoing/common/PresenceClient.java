@@ -64,6 +64,10 @@ public final class PresenceClient implements WebSocket.Listener {
         return onlinePlayers.stream().sorted(String.CASE_INSENSITIVE_ORDER).toList();
     }
 
+    public void requestPresence() {
+        send(WihdProtocol.presenceRequest());
+    }
+
     public void requestCamera(String target) {
         send(WihdProtocol.cameraRequest(target));
     }
