@@ -41,7 +41,15 @@ public final class RemoteTexture {
         int[] argb = snapshot.argb();
         for (int y = 0; y < height; y++) {
             for (int x = 0; x < width; x++) {
-                pixels.setPixel(x, y, argb[y * width + x]);
+                int color = argb[y * width + x];
+                int a = (color >>> 24) & 0xFF;
+                int r = (color >>> 16) & 0xFF;
+                int g = (color >>> 8) & 0xFF;
+                int b = color & 0xFF;
+
+                // NativeImage's RGBA format is packed as ABGR.
+                int abgr = (a << 24) | (b << 16) | (g << 8) | r;
+                pixels.setPixelRGBA(x, y, abgr);
             }
         }
 
