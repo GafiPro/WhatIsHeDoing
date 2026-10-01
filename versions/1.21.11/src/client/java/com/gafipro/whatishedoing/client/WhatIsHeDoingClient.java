@@ -12,6 +12,7 @@ import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallba
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.network.chat.Component;
 import com.mojang.blaze3d.pipeline.RenderTarget;
 
 import java.net.URI;
@@ -31,6 +32,8 @@ public final class WhatIsHeDoingClient implements ClientModInitializer {
     private static final RemoteTexture remoteTexture = new RemoteTexture();
     private static final AtomicBoolean initialized = new AtomicBoolean();
     private static long lastCaptureNs;
+    private static long lastPresenceRefreshNs;
+    private static long lastConnectAttemptNs;
 
     @Override
     public void onInitializeClient() {
@@ -41,7 +44,8 @@ public final class WhatIsHeDoingClient implements ClientModInitializer {
                     ClientCommandManager.literal("whatishedoing")
                             .then(ClientCommandManager.argument("player", StringArgumentType.word())
                                     .suggests((context, builder) -> {
-                                        if (presence != null) {
+                                        if (presence != null && presence.isConnected()) {
+                                            presence.requestPresence();
                                             presence.getOnlinePlayers().forEach(builder::suggest);
                                         }
                                         return builder.buildFuture();
@@ -65,7 +69,11 @@ public final class WhatIsHeDoingClient implements ClientModInitializer {
             return;
         }
 
-        if (!initialized.getAndSet(true)) {
+        long now = System.nanoTime();
+
+        if (!initialized.get() && now - lastConnectAttemptNs >= 5_000_000_000L) {
+            lastConnectAttemptNs = now;
+            initialized.set(true);
             try {
                 presence = new PresenceClient(
                         URI.create(SIGNALING_URL),
@@ -94,8 +102,11 @@ public final class WhatIsHeDoingClient implements ClientModInitializer {
 
                             @Override
                             public void onConnectionChanged(boolean connected) {
-                                if (!connected && camera != null) {
-                                    camera.stop();
+                                if (!connected) {
+                                    if (camera != null) {
+                                        camera.stop();
+                                    }
+                                    initialized.set(false);
                                 }
                             }
                         });
@@ -123,14 +134,36 @@ public final class WhatIsHeDoingClient implements ClientModInitializer {
             } catch (RuntimeException ignored) {
                 presence = null;
                 camera = null;
+                initialized.set(false);
             }
+        }
+
+        if (presence != null && presence.isConnected()
+                && now - lastPresenceRefreshNs >= 3_000_000_000L) {
+            lastPresenceRefreshNs = now;
+            presence.requestPresence();
         }
     }
 
     private static void startWatching(String target) {
-        if (presence != null && presence.isConnected() && camera != null) {
-            camera.startViewer(target);
+        Minecraft client = Minecraft.getInstance();
+
+        if (presence == null || !presence.isConnected() || camera == null) {
+            client.player.sendSystemMessage(Component.literal("VeilCull: session service is offline."));
+            return;
         }
+
+        if (target == null || target.isBlank()) {
+            client.player.sendSystemMessage(Component.literal("VeilCull: enter a player name."));
+            return;
+        }
+
+        if (!presence.getOnlinePlayers().contains(target)) {
+            client.player.sendSystemMessage(Component.literal("VeilCull: player '" + target + "' is not online."));
+            return;
+        }
+
+        camera.startViewer(target);
     }
 
     private static void stopWatching() {
