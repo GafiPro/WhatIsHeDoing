@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "id": "whatishedoing",
+  "version": "${version}",
+  "name": "VeilCull",
+  "description": "Client-side visibility and occlusion optimization.",
+  "authors": [
+    "jow79"
+  ],
+  "environment": "client",
+  "entrypoints": {
+    "client": [
+      "com.gafipro.whatishedoing.client.WhatIsHeDoingClient"
+    ]
+  },
+  "depends": {
+    "fabricloader": ">=0.19.5",
+    "minecraft": "~1.21.1",
+    "java": ">=21",
+    "fabric-api": "*"
+  },
+  "mixins": [
+    {
+      "config": "whatishedoing.client.mixins.json",
+      "environment": "client"
+    }
+  ],
+  "icon": "assets/veillcull/icon.png"
+}
