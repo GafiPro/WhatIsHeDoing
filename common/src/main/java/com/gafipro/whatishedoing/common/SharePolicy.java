@@ -20,6 +20,10 @@ public final class SharePolicy {
                 || prefs.getBoolean(KEY, false);
     }
 
+    public boolean isExplicitlyAllowed() {
+        return prefs.getBoolean(KEY, false);
+    }
+
     public void setAllowsRequests(boolean allowed) {
         prefs.putBoolean(KEY, allowed);
     }
