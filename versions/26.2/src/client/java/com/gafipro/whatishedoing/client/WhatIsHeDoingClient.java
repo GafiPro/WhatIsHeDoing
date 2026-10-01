@@ -61,8 +61,7 @@ public final class WhatIsHeDoingClient implements ClientModInitializer {
                                     .executes(context -> {
                                         stopWatching();
                                         return 1;
-                                    }))
-            );
+                                    })));
         });
     }
 
@@ -150,23 +149,17 @@ public final class WhatIsHeDoingClient implements ClientModInitializer {
         Minecraft client = Minecraft.getInstance();
 
         if (presence == null || !presence.isConnected() || camera == null) {
-            client.gui.hud.getChat().addMessage(
-                    Component.literal("VeilCull: session service is offline.")
-            );
+            client.player.sendSystemMessage(Component.literal("VeilCull: session service is offline."));
             return;
         }
 
         if (target == null || target.isBlank()) {
-            client.gui.hud.getChat().addMessage(
-                    Component.literal("VeilCull: enter a player name.")
-            );
+            client.player.sendSystemMessage(Component.literal("VeilCull: enter a player name."));
             return;
         }
 
         if (!presence.getOnlinePlayers().contains(target)) {
-            client.gui.hud.getChat().addMessage(
-                    Component.literal("VeilCull: player '" + target + "' is not online.")
-            );
+            client.player.sendSystemMessage(Component.literal("VeilCull: player '" + target + "' is not online."));
             return;
         }
 
