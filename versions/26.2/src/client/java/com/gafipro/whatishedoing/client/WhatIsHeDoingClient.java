@@ -22,7 +22,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 @Environment(EnvType.CLIENT)
 public final class WhatIsHeDoingClient implements ClientModInitializer {
-    private static final String SIGNALING_URL =
+    private static String signalingUrl =
             System.getProperty("wihd.signalingUrl", "ws://127.0.0.1:8787");
     private static final long CAPTURE_INTERVAL_NS = 33_333_333L;
     private static final int MAX_WIDTH = 1280;
@@ -45,6 +45,49 @@ public final class WhatIsHeDoingClient implements ClientModInitializer {
         ClientCommandRegistrationCallback.EVENT.register((dispatcher, commandBuildContext) -> {
             dispatcher.register(
                     ClientCommands.literal("whatishedoing")
+                            .then(ClientCommands.literal("allow")
+                                    .executes(context -> {
+                                        sharePolicy.setAllowsRequests(true);
+                                        context.getSource().sendFeedback(
+                                                Component.literal("VeilCull: camera sharing enabled."));
+                                        return 1;
+                                    }))
+                            .then(ClientCommands.literal("deny")
+                                    .executes(context -> {
+                                        sharePolicy.setAllowsRequests(false);
+                                        stopWatching();
+                                        context.getSource().sendFeedback(
+                                                Component.literal("VeilCull: camera sharing disabled."));
+                                        return 1;
+                                    }))
+                            .then(ClientCommands.literal("status")
+                                    .executes(context -> {
+                                        context.getSource().sendFeedback(
+                                                Component.literal(
+                                                        "VeilCull: server=" + signalingUrl
+                                                                + " | connected=" + (presence != null && presence.isConnected())
+                                                                + " | sharing=" + sharePolicy.allowsRequests()
+                                                                + " | online=" + (presence == null ? "[]" : presence.getOnlinePlayers())));
+                                        return 1;
+                                    }))
+                            .then(ClientCommands.literal("server")
+                                    .then(ClientCommands.argument("url", StringArgumentType.string())
+                                            .executes(context -> {
+                                                String url = StringArgumentType.getString(context, "url").trim();
+                                                if (!(url.startsWith("ws://") || url.startsWith("wss://"))) {
+                                                    context.getSource().sendFeedback(
+                                                            Component.literal(
+                                                                    "VeilCull: URL must start with ws:// or wss://"));
+                                                    return 0;
+                                                }
+                                                signalingUrl = url;
+                                                System.setProperty("wihd.signalingUrl", url);
+                                                disconnect();
+                                                context.getSource().sendFeedback(
+                                                        Component.literal(
+                                                                "VeilCull: signaling server changed to " + url));
+                                                return 1;
+                                            })))
                             .then(ClientCommands.argument("player", StringArgumentType.word())
                                     .suggests((context, builder) -> {
                                         if (presence != null && presence.isConnected()) {
@@ -73,12 +116,12 @@ public final class WhatIsHeDoingClient implements ClientModInitializer {
 
         long now = System.nanoTime();
 
-        if (!initialized.get() && now - lastConnectAttemptNs >= 5_000_000_000L) {
+        if (!initialized.get() && now - lastConnectAttemptNs >= 1_000_000_000L) {
             lastConnectAttemptNs = now;
             initialized.set(true);
             try {
                 presence = new PresenceClient(
-                        URI.create(SIGNALING_URL),
+                        URI.create(signalingUrl),
                         new PresenceClient.Listener() {
                             @Override
                             public void onMessage(JsonObject message) {
@@ -107,6 +150,13 @@ public final class WhatIsHeDoingClient implements ClientModInitializer {
                             public void onConnectionChanged(boolean connected) {
                                 if (!connected && camera != null) {
                                     camera.stop();
+                                }
+                                if (!connected) {
+                                    initialized.set(false);
+                                    if (client.player != null) {
+                                        client.player.sendSystemMessage(
+                                                Component.literal("VeilCull: signaling server disconnected."));
+                                    }
                                 }
                             }
                         });
@@ -143,6 +193,20 @@ public final class WhatIsHeDoingClient implements ClientModInitializer {
             lastPresenceRefreshNs = now;
             presence.requestPresence();
         }
+    }
+
+    private static void disconnect() {
+        if (camera != null) {
+            camera.stop();
+            camera = null;
+        }
+        if (presence != null) {
+            presence.close();
+            presence = null;
+        }
+        initialized.set(false);
+        lastConnectAttemptNs = 0L;
+        lastPresenceRefreshNs = 0L;
     }
 
     private static void startWatching(String target) {
