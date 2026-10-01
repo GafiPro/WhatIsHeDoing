@@ -4,7 +4,6 @@ import com.gafipro.whatishedoing.common.WebRtcCameraSession;
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.platform.NativeImage;
 import net.minecraft.client.Screenshot;
-import net.minecraft.util.ARGB;
 
 public final class NativeFrameCapture {
     private NativeFrameCapture() {}
@@ -40,8 +39,16 @@ public final class NativeFrameCapture {
                 int sourceY = (int) (((long) y * height) / outputHeight);
                 for (int x = 0; x < outputWidth; x++) {
                     int sourceX = (int) (((long) x * width) / outputWidth);
+
+                    // NativeImage's RGBA format is stored as ABGR in the packed int.
+                    int abgr = image.getPixelRGBA(sourceX, sourceY);
+                    int a = (abgr >>> 24) & 0xFF;
+                    int b = (abgr >>> 16) & 0xFF;
+                    int g = (abgr >>> 8) & 0xFF;
+                    int r = abgr & 0xFF;
+
                     pixels[y * outputWidth + x] =
-                            ARGB.fromABGR(image.getPixel(sourceX, sourceY));
+                            (a << 24) | (r << 16) | (g << 8) | b;
                 }
             }
 
