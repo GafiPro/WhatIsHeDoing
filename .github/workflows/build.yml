@@ -7,11 +7,11 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: whatishedoing-build-${{ github.ref }}
+  group: whatishedoing-neoforge-\${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  build-1-21-1-neoforge:
+  prepare-neoforge:
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -26,7 +26,47 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "9.7.0"
-      - run: bash -o pipefail -c 'gradle build --no-daemon --max-workers=2 2>&1 | tee build.log'
+      - name: Prepare NeoForge Minecraft artifacts
+        run: bash -o pipefail -c 'gradle createMinecraftArtifacts --no-daemon --max-workers=2 2>&1 | tee prepare.log'
+      - name: Upload prepared NeoForge artifacts
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: neoforge-minecraft-artifacts
+          path: versions/1.21.1-neoforge/build/tmp/createMinecraftArtifacts/
+          if-no-files-found: error
+          compression-level: 0
+      - name: Upload preparation log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log-prepare-neoforge
+          path: versions/1.21.1-neoforge/prepare.log
+          if-no-files-found: ignore
+
+  build-neoforge:
+    needs: prepare-neoforge
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: versions/1.21.1-neoforge
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "9.7.0"
+      - name: Restore prepared NeoForge artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: neoforge-minecraft-artifacts
+          path: versions/1.21.1-neoforge/build/tmp/createMinecraftArtifacts/
+      - name: Build NeoForge mod
+        run: bash -o pipefail -c 'gradle build --no-daemon --max-workers=2 2>&1 | tee build.log'
       - name: Upload NeoForge build log
         if: always()
         uses: actions/upload-artifact@v4
@@ -42,3 +82,4 @@ jobs:
         with:
           name: veillcull-1.21.1-neoforge
           path: versions/1.21.1-neoforge/build/libs/*-1.21.1-NeoForge.jar
+          if-no-files-found: error
