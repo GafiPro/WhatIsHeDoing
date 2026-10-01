@@ -149,17 +149,17 @@ public final class WhatIsHeDoingClient implements ClientModInitializer {
         Minecraft client = Minecraft.getInstance();
 
         if (presence == null || !presence.isConnected() || camera == null) {
-            client.player.sendMessage(Component.literal("VeilCull: session service is offline."), false);
+            client.player.displayClientMessage(Component.literal("VeilCull: session service is offline."), false);
             return;
         }
 
         if (target == null || target.isBlank()) {
-            client.player.sendMessage(Component.literal("VeilCull: enter a player name."), false);
+            client.player.displayClientMessage(Component.literal("VeilCull: enter a player name."), false);
             return;
         }
 
         if (!presence.getOnlinePlayers().contains(target)) {
-            client.player.sendMessage(Component.literal("VeilCull: player '" + target + "' is not online."), false);
+            client.player.displayClientMessage(Component.literal("VeilCull: player '" + target + "' is not online."), false);
             return;
         }
 
