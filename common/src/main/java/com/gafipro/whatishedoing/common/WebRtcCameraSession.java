@@ -48,7 +48,7 @@ public final class WebRtcCameraSession {
     }
 
     private final PresenceClient signaling;
-    private final boolean allowIncomingRequests;
+    private volatile boolean allowIncomingRequests;
     private final Listener listener;
     private final RemoteVideoFrame remoteFrame;
 
@@ -81,6 +81,13 @@ public final class WebRtcCameraSession {
 
     public RemoteVideoFrame remoteFrame() {
         return remoteFrame;
+    }
+
+    public void setAllowIncomingRequests(boolean allowed) {
+        allowIncomingRequests = allowed;
+        if (!allowed && role.get() == Role.SHARER) {
+            stopInternal(false);
+        }
     }
 
     public synchronized void startViewer(String target) {
