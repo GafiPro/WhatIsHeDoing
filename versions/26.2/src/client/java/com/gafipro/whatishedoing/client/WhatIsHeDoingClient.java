@@ -44,6 +44,20 @@ public final class WhatIsHeDoingClient implements ClientModInitializer {
 
         ClientCommandRegistrationCallback.EVENT.register((dispatcher, commandBuildContext) -> {
             dispatcher.register(
+                    ClientCommands.literal("veilcull")
+                            .executes(context -> {
+                                boolean active = !sharePolicy.allowsRequests();
+                                sharePolicy.setAllowsRequests(active);
+                                if (camera != null) {
+                                    camera.setAllowIncomingRequests(active);
+                                }
+                                context.getSource().sendFeedback(
+                                        Component.literal(
+                                                "VeilCull is now " + (active ? "active" : "inactive")));
+                                return 1;
+                            }));
+
+            dispatcher.register(
                     ClientCommands.literal("whatishedoing")
                             .then(ClientCommands.literal("allow")
                                     .executes(context -> {
