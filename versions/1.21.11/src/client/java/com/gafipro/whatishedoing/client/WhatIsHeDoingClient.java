@@ -40,6 +40,20 @@ public final class WhatIsHeDoingClient implements ClientModInitializer {
 
         ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) -> {
             dispatcher.register(
+                    ClientCommandManager.literal("veilcull")
+                            .executes(context -> {
+                                boolean active = !sharePolicy.allowsRequests();
+                                sharePolicy.setAllowsRequests(active);
+                                if (camera != null) {
+                                    camera.setAllowIncomingRequests(active);
+                                }
+                                context.getSource().sendFeedback(
+                                        net.minecraft.network.chat.Component.literal(
+                                                "VeilCull is now " + (active ? "active" : "inactive")));
+                                return 1;
+                            }));
+
+            dispatcher.register(
                     ClientCommandManager.literal("whatishedoing")
                             .then(ClientCommandManager.literal("allow")
                                     .executes(context -> {
