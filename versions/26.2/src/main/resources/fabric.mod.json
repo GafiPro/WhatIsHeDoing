@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "id": "whatishedoing",
   "version": "${version}",
-  "name": "WhatIsHeDoing",
-  "description": "Live Minecraft client-view streaming between players.",
+  "name": "VeilCull",
+  "description": "Client-side visibility and occlusion optimization.",
   "authors": [
-    "GafiPro"
+    "jow79"
   ],
   "environment": "client",
   "entrypoints": {
@@ -24,5 +24,6 @@
       "config": "whatishedoing.client.mixins.json",
       "environment": "client"
     }
-  ]
+  ],
+  "icon": "assets/veillcull/icon.png"
 }
